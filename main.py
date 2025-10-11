@@ -4,6 +4,7 @@ from botocore.exceptions import ClientError
 
 
 def list_bedrock_models():
+    """Lists all available models in Amazon Bedrock"""
     bedrock = boto3.client('bedrock', region_name='us-east-1')
 
     try:
@@ -11,65 +12,60 @@ def list_bedrock_models():
         models = response.get('modelSummaries', [])
 
         print("\n" + "=" * 80)
-        print("MODELOS DISPONIBLES EN AMAZON BEDROCK")
+        print("AVAILABLE MODELS IN AMAZON BEDROCK")
         print("=" * 80 + "\n")
 
-        # Modelos recomendados que funcionan bien (sin requerir perfiles de inferencia)
-        recommended_models = [
-            {
-                'index': 1,
-                'id': 'anthropic.claude-3-sonnet-20240229-v1:0',
-                'name': 'Claude 3 Sonnet (Recomendado)',
-                'provider': 'Anthropic'
-            },
-            {
-                'index': 2,
-                'id': 'anthropic.claude-3-haiku-20240307-v1:0',
-                'name': 'Claude 3 Haiku (Rápido)',
-                'provider': 'Anthropic'
-            },
-            {
-                'index': 3,
-                'id': 'anthropic.claude-v2:1',
-                'name': 'Claude v2.1 (Estable)',
-                'provider': 'Anthropic'
-            },
-            {
-                'index': 4,
-                'id': 'meta.llama3-1-70b-instruct-v1:0',
-                'name': 'Llama 3.1 70B Instruct',
-                'provider': 'Meta'
-            },
-            {
-                'index': 5,
-                'id': 'mistral.mixtral-8x7b-instruct-v0:1',
-                'name': 'Mixtral 8x7B Instruct',
-                'provider': 'Mistral AI'
-            }
+        # Filter only models that support conversation and on-demand invocation
+        chat_models = []
+        
+        # Models that require inference profiles (exclude these)
+        excluded_models = [
+            'anthropic.claude-sonnet-4',
+            'anthropic.claude-opus-4',
         ]
+        
+        for idx, model in enumerate(models, 1):
+            model_id = model.get('modelId', 'N/A')
+            model_name = model.get('modelName', 'N/A')
+            provider = model.get('providerName', 'N/A')
+            inference_types = model.get('inferenceTypesSupported', [])
 
-        for model in recommended_models:
-            print(f"{model['index']}. {model['name']}")
-            print(f"   ID: {model['id']}")
-            print(f"   Proveedor: {model['provider']}")
-            print()
+            # Filter chat/conversation models
+            if any(keyword in model_id.lower() for keyword in ['claude', 'llama', 'mistral', 'titan']):
+                # Exclude models that require inference profiles
+                if any(excluded in model_id.lower() for excluded in excluded_models):
+                    continue
+                
+                # Only include models that support ON_DEMAND inference
+                if 'ON_DEMAND' in inference_types or not inference_types:
+                    chat_models.append({
+                        'index': len(chat_models) + 1,
+                        'id': model_id,
+                        'name': model_name,
+                        'provider': provider
+                    })
+                    print(f"{len(chat_models)}. {model_name}")
+                    print(f"   ID: {model_id}")
+                    print(f"   Provider: {provider}")
+                    print()
 
-        print("⚠️  Nota: Se muestran solo modelos probados y funcionales.")
-        print("   Los modelos más nuevos pueden requerir configuración adicional.\n")
-
-        return recommended_models
+        if chat_models:
+            print("💡 Note: Only models with on-demand support are shown.\n")
+        
+        return chat_models
 
     except ClientError as e:
-        print(f"Error al listar modelos: {e}")
+        print(f"Error listing models: {e}")
         return []
 
 
 def chat_with_bedrock(model_id, user_message):
+    """Sends a message to a Bedrock model and gets the response"""
     bedrock_runtime = boto3.client('bedrock-runtime', region_name='us-east-1')
 
     try:
         if 'claude' in model_id.lower():
-            # Claude v3 y superior usa el formato de mensajes
+            # Claude v3 and above uses the messages format
             if 'claude-3' in model_id.lower():
                 body = json.dumps({
                     "anthropic_version": "bedrock-2023-05-31",
@@ -82,7 +78,7 @@ def chat_with_bedrock(model_id, user_message):
                     ]
                 })
             else:
-                # Claude v2 usa el formato de prompt
+                # Claude v2 uses the prompt format
                 body = json.dumps({
                     "prompt": f"\n\nHuman: {user_message}\n\nAssistant:",
                     "max_tokens_to_sample": 1000,
@@ -113,10 +109,10 @@ def chat_with_bedrock(model_id, user_message):
                 "top_p": 0.9
             })
         else:
-            print(f"Modelo no soportado en este demo: {model_id}")
+            print(f"Model not supported in this demo: {model_id}")
             return None
 
-        # Invocar el modelo
+        # Invoke the model
         response = bedrock_runtime.invoke_model(
             modelId=model_id,
             body=body,
@@ -124,15 +120,15 @@ def chat_with_bedrock(model_id, user_message):
             accept='application/json'
         )
 
-        # Parsear la respuesta
+        # Parse the response
         response_body = json.loads(response['body'].read())
 
-        # Extraer el texto según el proveedor
+        # Extract text according to the provider
         if 'claude' in model_id.lower():
             if 'claude-3' in model_id.lower():
                 return response_body['content'][0]['text']
             else:
-                # Claude v2 usa 'completion'
+                # Claude v2 uses 'completion'
                 return response_body.get('completion', 'No response')
         elif 'titan' in model_id.lower():
             return response_body['results'][0]['outputText']
@@ -146,69 +142,69 @@ def chat_with_bedrock(model_id, user_message):
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         if error_code == 'ValidationException':
-            print(f"Error de validación: {e}")
-            print("💡 Sugerencia: Este modelo puede requerir perfiles de inferencia o no estar disponible en tu región.")
-            print("   Intenta con otro modelo de la lista.")
+            print(f"Validation error: {e}")
+            print("💡 Suggestion: This model may require inference profiles or may not be available in your region.")
+            print("   Try another model from the list.")
         elif error_code == 'AccessDeniedException':
-            print(f"Error de acceso: {e}")
-            print("💡 Sugerencia: Verifica que tu cuenta tenga acceso a este modelo en AWS Bedrock.")
+            print(f"Access error: {e}")
+            print("💡 Suggestion: Verify that your account has access to this model in AWS Bedrock.")
         else:
-            print(f"Error al invocar el modelo: {e}")
+            print(f"Error invoking model: {e}")
         return None
     except Exception as e:
-        print(f"Error inesperado: {e}")
+        print(f"Unexpected error: {e}")
         return None
 
 
 def main():
-    """Función principal del demo"""
-    print("\n🤖 DEMO DE CONVERSACIÓN CON AMAZON BEDROCK 🤖\n")
+    """Main demo function"""
+    print("\n🤖 AMAZON BEDROCK CONVERSATION DEMO 🤖\n")
 
-    # Paso 1: Listar modelos disponibles
+    # Step 1: List available models
     models = list_bedrock_models()
 
     if not models:
-        print("No se encontraron modelos disponibles.")
+        print("No available models found.")
         return
 
-    # Paso 2: Seleccionar un modelo
+    # Step 2: Select a model
     print("=" * 80)
     while True:
         try:
-            selection = int(input(f"\nSelecciona un modelo (1-{len(models)}): "))
+            selection = int(input(f"\nSelect a model (1-{len(models)}): "))
             if 1 <= selection <= len(models):
                 selected_model = models[selection - 1]
                 break
             else:
-                print(f"Por favor, selecciona un número entre 1 y {len(models)}")
+                print(f"Please select a number between 1 and {len(models)}")
         except ValueError:
-            print("Por favor, ingresa un número válido")
+            print("Please enter a valid number")
 
-    print(f"\n✅ Modelo seleccionado: {selected_model['name']}")
+    print(f"\n✅ Selected model: {selected_model['name']}")
     print(f"   ID: {selected_model['id']}\n")
 
-    # Paso 3: Iniciar conversación
+    # Step 3: Start conversation
     print("=" * 80)
-    print("CONVERSACIÓN (escribe 'salir' para terminar)")
+    print("CONVERSATION (type 'exit' or 'quit' to end)")
     print("=" * 80 + "\n")
 
     while True:
-        user_input = input("Tú: ")
+        user_input = input("You: ")
 
         if user_input.lower() in ['salir', 'exit', 'quit']:
-            print("\n👋 ¡Hasta luego!")
+            print("\n👋 Goodbye!")
             break
 
         if not user_input.strip():
             continue
 
-        print("\n🤖 Asistente: ", end="", flush=True)
+        print("\n🤖 Assistant: ", end="", flush=True)
         response = chat_with_bedrock(selected_model['id'], user_input)
 
         if response:
             print(response)
         else:
-            print("No se pudo obtener una respuesta.")
+            print("Could not get a response.")
 
         print()
 
