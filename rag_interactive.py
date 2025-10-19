@@ -1,6 +1,6 @@
 """
-Sistema RAG Interactivo con Amazon Bedrock
-Permite hacer consultas interactivas y comparar respuestas con y sin RAG
+Interactive RAG System with Amazon Bedrock
+Allows interactive queries and comparison of responses with and without RAG
 """
 
 import boto3
@@ -8,16 +8,16 @@ import json
 import chromadb
 from chromadb import Documents, EmbeddingFunction, Embeddings
 
-# Inicializar el cliente de Bedrock
+# Initialize Bedrock client
 bedrock_runtime = boto3.client('bedrock-runtime', region_name='us-east-1')
 
-# Configuración de modelos
+# Model configuration
 EMBEDDING_MODEL = "amazon.titan-embed-text-v1"
 TEXT_GENERATION_MODEL = "anthropic.claude-3-haiku-20240307-v1:0"
 
 
 class BedrockEmbeddingFunction(EmbeddingFunction):
-    """Función de embedding personalizada para Amazon Bedrock"""
+    """Custom embedding function for Amazon Bedrock"""
     
     def __init__(self):
         pass
@@ -36,13 +36,13 @@ class BedrockEmbeddingFunction(EmbeddingFunction):
                 response_body = json.loads(response['body'].read())
                 embeddings.append(response_body['embedding'])
             except Exception as e:
-                print(f"[ERROR] Error obteniendo embedding: {e}")
+                print(f"[ERROR] Error getting embedding: {e}")
                 raise
         return embeddings
 
 
 def generate_text(prompt):
-    """Genera texto usando Claude 3 en Amazon Bedrock"""
+    """Generates text using Claude 3 on Amazon Bedrock"""
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": 500,
@@ -66,18 +66,18 @@ def generate_text(prompt):
         response_body = json.loads(response['body'].read())
         return response_body['content'][0]['text']
     except Exception as e:
-        print(f"[ERROR] Error generando texto: {e}")
+        print(f"[ERROR] Error generating text: {e}")
         raise
 
 
-# Inicializar ChromaDB
-print("Inicializando ChromaDB...")
+# Initialize ChromaDB
+print("Initializing ChromaDB...")
 chroma_client = chromadb.Client()
 
-# Crear función de embedding personalizada
+# Create custom embedding function
 bedrock_ef = BedrockEmbeddingFunction()
 
-# Crear colección
+# Create collection
 try:
     try:
         chroma_client.delete_collection(name="bedrock_docs")
@@ -88,14 +88,14 @@ try:
         name="bedrock_docs",
         embedding_function=bedrock_ef
     )
-    print("[OK] Coleccion de Chroma creada exitosamente\n")
+    print("[OK] Chroma collection created successfully\n")
 except Exception as e:
-    print(f"[ERROR] Error creando coleccion: {e}")
+    print(f"[ERROR] Error creating collection: {e}")
     exit(1)
 
 
 def add_documents(docs):
-    """Agrega documentos a la colección de Chroma"""
+    """Adds documents to the Chroma collection"""
     try:
         collection.add(
             documents=docs,
@@ -103,223 +103,223 @@ def add_documents(docs):
         )
         return True
     except Exception as e:
-        print(f"[ERROR] Error agregando documentos: {e}")
+        print(f"[ERROR] Error adding documents: {e}")
         return False
 
 
 def rag_generate(query, top_k=2, verbose=False):
-    """Genera una respuesta usando RAG"""
+    """Generates a response using RAG"""
     try:
-        # Recuperar documentos relevantes
+        # Retrieve relevant documents
         results = collection.query(
             query_texts=[query],
             n_results=top_k
         )
         
-        # Mostrar documentos recuperados si verbose está activado
+        # Show retrieved documents if verbose is enabled
         if verbose:
-            print("\nDocumentos recuperados:")
+            print("\nRetrieved documents:")
             for i, doc in enumerate(results['documents'][0], 1):
                 print(f"  {i}. {doc}")
             print()
         
-        # Construir el prompt con el contexto recuperado
+        # Build prompt with retrieved context
         context = "\n".join(results['documents'][0])
         
-        prompt = f"""Dado el siguiente contexto, por favor responde la pregunta.
+        prompt = f"""Given the following context, please answer the question.
 
-Contexto: {context}
+Context: {context}
 
-Pregunta: {query}
+Question: {query}
 
-Basado en el contexto proporcionado, mi respuesta es:"""
+Based on the provided context, my answer is:"""
         
-        # Generar respuesta
+        # Generate response
         response = generate_text(prompt)
         return response
     except Exception as e:
-        print(f"[ERROR] Error en rag_generate: {e}")
+        print(f"[ERROR] Error in rag_generate: {e}")
         return None
 
 
 def generate_without_rag(query):
-    """Genera una respuesta sin usar RAG"""
+    """Generates a response without using RAG"""
     try:
         return generate_text(query)
     except Exception as e:
-        print(f"[ERROR] Error en generate_without_rag: {e}")
+        print(f"[ERROR] Error in generate_without_rag: {e}")
         return None
 
 
 def show_menu():
-    """Muestra el menú principal"""
+    """Shows the main menu"""
     print("\n" + "="*80)
-    print("SISTEMA RAG INTERACTIVO - AMAZON BEDROCK")
+    print("INTERACTIVE RAG SYSTEM - AMAZON BEDROCK")
     print("="*80)
-    print("\nOpciones:")
-    print("  1. Hacer una consulta con RAG")
-    print("  2. Hacer una consulta sin RAG")
-    print("  3. Comparar RAG vs Sin RAG")
-    print("  4. Agregar nuevos documentos")
-    print("  5. Ver documentos actuales")
-    print("  6. Salir")
+    print("\nOptions:")
+    print("  1. Make a query with RAG")
+    print("  2. Make a query without RAG")
+    print("  3. Compare RAG vs Without RAG")
+    print("  4. Add new documents")
+    print("  5. View current documents")
+    print("  6. Exit")
     print("="*80)
 
 
 def view_documents():
-    """Muestra todos los documentos en la colección"""
+    """Shows all documents in the collection"""
     try:
-        # Obtener todos los documentos
+        # Get all documents
         results = collection.get()
         docs = results.get('documents', [])
         
         if not docs:
-            print("\nNo hay documentos en la coleccion.")
+            print("\nNo documents in collection.")
             return
         
-        print(f"\nDocumentos en la coleccion ({len(docs)} total):")
+        print(f"\nDocuments in collection ({len(docs)} total):")
         print("-"*80)
         for i, doc in enumerate(docs, 1):
             print(f"{i}. {doc}")
         print("-"*80)
     except Exception as e:
-        print(f"[ERROR] Error obteniendo documentos: {e}")
+        print(f"[ERROR] Error getting documents: {e}")
 
 
 def main():
-    """Función principal del sistema interactivo"""
+    """Main function of the interactive system"""
     
-    # Agregar documentos de ejemplo iniciales
-    print("Cargando documentos de ejemplo...")
+    # Add initial sample documents
+    print("Loading sample documents...")
     sample_docs = [
-        "Amazon Bedrock es un servicio totalmente gestionado de modelos fundamentales.",
-        "Los sistemas RAG combinan recuperación y generación para mejorar las respuestas.",
-        "Los embeddings son representaciones vectoriales de texto en espacios de alta dimensión.",
-        "Chroma es un almacenamiento vectorial eficiente para construir aplicaciones de IA.",
-        "Los modelos fundamentales pueden ajustarse para tareas y dominios específicos.",
-        "Amazon Bedrock proporciona acceso a modelos de IA de empresas líderes como Anthropic, AI21 Labs y Amazon.",
-        "RAG mejora la precisión de las respuestas al proporcionar contexto relevante del conocimiento almacenado.",
-        "Los embeddings permiten buscar documentos similares mediante similitud de coseno.",
-        "Claude es un modelo de lenguaje desarrollado por Anthropic disponible en Amazon Bedrock.",
-        "Los sistemas RAG son especialmente útiles para aplicaciones que requieren conocimiento específico de dominio."
+        "Amazon Bedrock is a fully managed service for foundation models.",
+        "RAG systems combine retrieval and generation to improve responses.",
+        "Embeddings are vector representations of text in high-dimensional spaces.",
+        "Chroma is an efficient vector store for building AI applications.",
+        "Foundation models can be fine-tuned for specific tasks and domains.",
+        "Amazon Bedrock provides access to AI models from leading companies like Anthropic, AI21 Labs, and Amazon.",
+        "RAG improves response accuracy by providing relevant context from stored knowledge.",
+        "Embeddings enable searching for similar documents using cosine similarity.",
+        "Claude is a language model developed by Anthropic available on Amazon Bedrock.",
+        "RAG systems are especially useful for applications requiring domain-specific knowledge."
     ]
     
     if add_documents(sample_docs):
-        print(f"[OK] {len(sample_docs)} documentos cargados exitosamente\n")
+        print(f"[OK] {len(sample_docs)} documents loaded successfully\n")
     else:
-        print("[ERROR] Error cargando documentos iniciales")
+        print("[ERROR] Error loading initial documents")
         return
     
-    # Loop principal
+    # Main loop
     while True:
         show_menu()
-        choice = input("\nSelecciona una opción (1-6): ").strip()
+        choice = input("\nSelect an option (1-6): ").strip()
         
         if choice == '1':
-            # Consulta con RAG
+            # Query with RAG
             print("\n" + "="*80)
-            print("CONSULTA CON RAG")
+            print("QUERY WITH RAG")
             print("="*80)
-            query = input("\nIngresa tu consulta: ").strip()
+            query = input("\nEnter your query: ").strip()
             
             if query:
-                print("\nProcesando con RAG...")
+                print("\nProcessing with RAG...")
                 response = rag_generate(query, top_k=3, verbose=True)
                 if response:
-                    print("Respuesta:")
+                    print("Response:")
                     print("-"*80)
                     print(response)
                     print("-"*80)
         
         elif choice == '2':
-            # Consulta sin RAG
+            # Query without RAG
             print("\n" + "="*80)
-            print("CONSULTA SIN RAG")
+            print("QUERY WITHOUT RAG")
             print("="*80)
-            query = input("\nIngresa tu consulta: ").strip()
+            query = input("\nEnter your query: ").strip()
             
             if query:
-                print("\nProcesando sin RAG...")
+                print("\nProcessing without RAG...")
                 response = generate_without_rag(query)
                 if response:
-                    print("Respuesta:")
+                    print("Response:")
                     print("-"*80)
                     print(response)
                     print("-"*80)
         
         elif choice == '3':
-            # Comparar RAG vs Sin RAG
+            # Compare RAG vs Without RAG
             print("\n" + "="*80)
-            print("COMPARACION: RAG vs SIN RAG")
+            print("COMPARISON: RAG vs WITHOUT RAG")
             print("="*80)
-            query = input("\nIngresa tu consulta: ").strip()
+            query = input("\nEnter your query: ").strip()
             
             if query:
-                print("\nProcesando con RAG...")
+                print("\nProcessing with RAG...")
                 rag_response = rag_generate(query, top_k=3, verbose=True)
                 
-                print("\nProcesando sin RAG...")
+                print("\nProcessing without RAG...")
                 no_rag_response = generate_without_rag(query)
                 
                 print("\n" + "="*80)
-                print("RESULTADOS DE LA COMPARACION")
+                print("COMPARISON RESULTS")
                 print("="*80)
                 
-                print("\n[RAG] CON RAG:")
+                print("\n[RAG] WITH RAG:")
                 print("-"*80)
                 if rag_response:
                     print(rag_response)
                 print("-"*80)
                 
-                print("\n[SIN RAG] SIN RAG:")
+                print("\n[WITHOUT RAG] WITHOUT RAG:")
                 print("-"*80)
                 if no_rag_response:
                     print(no_rag_response)
                 print("-"*80)
         
         elif choice == '4':
-            # Agregar nuevos documentos
+            # Add new documents
             print("\n" + "="*80)
-            print("AGREGAR NUEVOS DOCUMENTOS")
+            print("ADD NEW DOCUMENTS")
             print("="*80)
-            print("\nIngresa los documentos (uno por línea).")
-            print("Escribe 'FIN' cuando termines:\n")
+            print("\nEnter documents (one per line).")
+            print("Type 'DONE' when finished:\n")
             
             new_docs = []
             while True:
-                doc = input(f"Documento {len(new_docs) + 1}: ").strip()
-                if doc.upper() == 'FIN':
+                doc = input(f"Document {len(new_docs) + 1}: ").strip()
+                if doc.upper() == 'DONE':
                     break
                 if doc:
                     new_docs.append(doc)
             
             if new_docs:
-                print(f"\nAgregando {len(new_docs)} documentos...")
+                print(f"\nAdding {len(new_docs)} documents...")
                 if add_documents(new_docs):
-                    print(f"[OK] {len(new_docs)} documentos agregados exitosamente")
+                    print(f"[OK] {len(new_docs)} documents added successfully")
             else:
-                print("[AVISO] No se agregaron documentos")
+                print("[WARNING] No documents were added")
         
         elif choice == '5':
-            # Ver documentos actuales
+            # View current documents
             view_documents()
         
         elif choice == '6':
-            # Salir
-            print("\nGracias por usar el Sistema RAG!")
+            # Exit
+            print("\nThank you for using the RAG System!")
             print("="*80 + "\n")
             break
         
         else:
-            print("\n[AVISO] Opcion invalida. Por favor selecciona 1-6.")
+            print("\n[WARNING] Invalid option. Please select 1-6.")
         
-        input("\nPresiona Enter para continuar...")
+        input("\nPress Enter to continue...")
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nSistema interrumpido. Hasta luego!")
+        print("\n\nSystem interrupted. Goodbye!")
     except Exception as e:
-        print(f"\n[ERROR] Error inesperado: {e}")
+        print(f"\n[ERROR] Unexpected error: {e}")
