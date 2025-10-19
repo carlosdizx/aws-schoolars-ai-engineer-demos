@@ -1,2 +1,7 @@
 boto3
 botocore
+numpy
+matplotlib
+scikit-learn
+chromadb
+sentence-transformers
